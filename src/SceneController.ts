@@ -75,19 +75,28 @@ export class SceneController {
         console.log(event)
         if (event.code === "Space" && event.shiftKey === false) {
             this.zOffset += 0.1
-            this.changeHeightOfPointLight(0.01)
+            this.changeLocationOfPointLight(new Vector3(0,0, 0.01))
         } else if (event.code === "Space" && event.shiftKey === true) {
             this.zOffset -= 0.1
-            this.changeHeightOfPointLight(-0.01)
+            this.changeLocationOfPointLight(new Vector3(0,0, 0.01))
         } else if (event.key === "y") {
             this.changeLightIntensity(0.05)
         } else if (event.key === "x") {
             this.changeLightIntensity(-0.05)
         }
+        if (event.key === "w") {
+            this.changeLocationOfPointLight(new Vector3(0.01,0, 0))
+        } if (event.key === "s") {
+            this.changeLocationOfPointLight(new Vector3(-0.01,0,0))
+        } if (event.key === "a") {
+            this.changeLocationOfPointLight(new Vector3(0,0.01,0))
+        } if (event.key === "d") {
+            this.changeLocationOfPointLight(new Vector3(0,-0.01,0))
+        }
     }
-    private changeHeightOfPointLight = (distance: number) => {
-        this.sphere.position.addScaledVector(new Vector3(0,0,distance), 1)
-        this.light.position.addScaledVector(new Vector3(0,0,distance), 1)
+    private changeLocationOfPointLight = (distance: Vector3) => {
+        this.sphere.position.addScaledVector(distance, 1)
+        this.light.position.addScaledVector(distance, 1)
     }
 
     private onClick = (event: any) => {

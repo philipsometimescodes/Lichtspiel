@@ -62,7 +62,7 @@ export function loadFBX(url: string, basePath: string, manager?: LoadingManager)
     loader.setPath(basePath);
     loader.load(url, function (object) {
       postProcess(object, true, null);
-      console.log(object)
+      
       // texture.encoding = THREE.sRGBEncoding;
       resolve(object);
     }, undefined, (e) => { reject(e.message) });

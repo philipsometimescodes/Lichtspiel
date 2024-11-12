@@ -1,59 +1,66 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeCamera, makeObjectsFromFile, makeLight, makeRenderer, makeGround, makeSphere, makeTarget, makeFinalTarget } from './lib/generators.ts';
+import { makeCamera, makeObjectsFromFile, makeRenderer, makeBlock } from './lib/generators.ts';
 import { ObjectModel } from './lib/ObjectModel.ts';
 import { Vector3 } from 'three';
+import { CharacterController } from './CharacterController.ts';
+import { randFloat } from 'three/src/math/MathUtils.js';
+
+type keyloggerObject = { [key: string]: boolean }
 
 export class SceneController {
 
     onWait: (() => void) | undefined;
     onReady: (() => void) | undefined;
 
-    private raycaster: THREE.Raycaster;
-    private pointer: THREE.Vector2;
-
     private waitState: number = 0;
     private scene: THREE.Scene;
     private loadingManager: THREE.LoadingManager;
     private renderer: THREE.WebGLRenderer;
     private camera: THREE.PerspectiveCamera;
-    private newCameraPosition: THREE.Vector3 | undefined;
-    private newCameraLookAt: THREE.Vector3 | undefined;
-    private sphere: THREE.Mesh;
-    private target: THREE.Mesh;
-    private finalTarget: THREE.Mesh;
-    private light: THREE.Light;
-    private keepMoving: boolean;
+    private oldCameraPosition: THREE.Vector3;
     private environment_scenes: ObjectModel[];
-    private t = 0;
+    public character: CharacterController;
     private ambientLight: THREE.Light
-    private zOffset: number;
-
+    private envBlocks: THREE.Mesh[]
+    private backgroundColor: THREE.Color
+    private blockColors: THREE.Color[]
+    private AnimationMixers: THREE.AnimationMixer[]
+    private AnimationClips: THREE.AnimationClip[]
+    private AnimationActions: THREE.AnimationAction[]
+    private vectorKeyframeTracks: THREE.VectorKeyframeTrack[][]
+    private clock: THREE.Clock
+    private keylogger: keyloggerObject
+    private orbitcontrols: OrbitControls | undefined
 
     private constructor(uiEl: HTMLElement) {
-        this.raycaster = new THREE.Raycaster()
-        this.pointer = new THREE.Vector2()
-        this.newCameraPosition = undefined;
-        this.newCameraLookAt = undefined;
+        this.character = new CharacterController()
+        this.envBlocks = []
+        this.clock = new THREE.Clock()
+        this.clock.start()
+        this.AnimationMixers = []
+        this.AnimationClips = []
+        this.AnimationActions = []
+        this.vectorKeyframeTracks = []
         this.environment_scenes = [];
         this.loadingManager = new THREE.LoadingManager();
         this.scene = new THREE.Scene();
-        this.target = makeTarget();
-        this.finalTarget = makeFinalTarget();
         this.renderer = makeRenderer();
         this.camera = makeCamera();
-        this.light = makeLight();
-        this.ambientLight =  new THREE.AmbientLight(0xffffff, 0.1);
-        this.keepMoving = false;
-        this.zOffset = 0.2
+        this.oldCameraPosition = new THREE.Vector3;
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0);
+        this.backgroundColor = new THREE.Color("#000000")
+        this.blockColors = [new THREE.Color("#FCA311"), new THREE.Color("#14213D"), new THREE.Color("#E5E5E5")]
+        this.keylogger = {}
+        this.orbitcontrols = undefined
         uiEl.appendChild(this.renderer.domElement);
-        this.sphere = makeSphere();
         this.initDefaults()
         this.renderer.render(this.scene, this.camera);
-        window.addEventListener('pointermove', this.onPointerMove);
-        window.addEventListener('click', this.onClick)
-        window.addEventListener('keypress', this.changeState)
-        requestAnimationFrame(this.renderLoop);
+        // window.addEventListener('pointermove', this.onPointerMove);
+        // window.addEventListener('click', this.onClick)
+        window.addEventListener('keydown', this.setKey)
+        window.addEventListener('keyup', this.unsetKey)
+        requestAnimationFrame(this.animate);
         this.loadingManager.onLoad = () => {
             this.changeWaitState(false);
         };
@@ -70,97 +77,91 @@ export class SceneController {
             this.onWait();
         }
     }
-
-    private changeState = (event: any) => {
-        console.log(event)
-        if (event.code === "Space" && event.shiftKey === false) {
-            this.zOffset += 0.1
-            this.changeLocationOfPointLight(new Vector3(0,0, 0.01))
-        } else if (event.code === "Space" && event.shiftKey === true) {
-            this.zOffset -= 0.1
-            this.changeLocationOfPointLight(new Vector3(0,0, 0.01))
-        } else if (event.key === "y") {
-            this.changeLightIntensity(0.05)
-        } else if (event.key === "x") {
-            this.changeLightIntensity(-0.05)
-        }
-        if (event.key === "w") {
-            this.changeLocationOfPointLight(new Vector3(0.01,0, 0))
-        } if (event.key === "s") {
-            this.changeLocationOfPointLight(new Vector3(-0.01,0,0))
-        } if (event.key === "a") {
-            this.changeLocationOfPointLight(new Vector3(0,0.01,0))
-        } if (event.key === "d") {
-            this.changeLocationOfPointLight(new Vector3(0,-0.01,0))
-        }
-    }
-    private changeLocationOfPointLight = (distance: Vector3) => {
-        this.sphere.position.addScaledVector(distance, 1)
-        this.light.position.addScaledVector(distance, 1)
+    private setKey = (event: any) => {
+        event.preventDefault()
+        this.keylogger[event.key] = true
     }
 
-    private onClick = (event: any) => {
-        this.finalTarget.position.copy(this.target.position)
-        this.finalTarget.position.setZ(this.zOffset)
-        this.finalTarget.visible = true
-        this.keepMoving = true
+    private unsetKey = (event: any) => {
+        event.preventDefault()
+        this.keylogger[event.key] = false
     }
 
-    private onPointerMove = (event: any) => {
-
-        // calculate pointer position in normalized device coordinates
-        // (-1 to +1) for both components
-        
-        this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1
-        this.pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
-        this.raycaster.setFromCamera(this.pointer, this.camera);
-
-        const intersects = this.raycaster.intersectObject(this.environment_scenes[0]);
-
-        // Toggle rotation bool for meshes that we clicked
-        if (intersects.length > 0) {
-
-            this.target.position.set(0, 0, 0);
-            // this.target.lookAt( intersects[ 0 ].face.normal );
-
-            this.target.position.copy(intersects[0].point);
-
-        }
+    private changeMovementState = () => {
+        let movementDirection = new Vector3(0, 0, 0)
+        if (this.keylogger[" "] && this.keylogger["Shift"] === true) {
+            movementDirection.add(new Vector3(0, 0, -0.2))
+        } else if (this.keylogger[" "]) {
+            movementDirection.add(new Vector3(0, 0, 0.2))
+        } if (this.keylogger["y"]) {
+            this.character.changeLightIntensity(0.5)
+        } if (this.keylogger["x"]) {
+            this.character.changeLightIntensity(-0.05)
+        } if (this.keylogger["w"] || this.keylogger["ArrowUp"]) {
+            movementDirection.add(new Vector3(0, 0.2, 0))
+        } if (this.keylogger["s"] || this.keylogger["ArrowDown"]) {
+            movementDirection.add(new Vector3(0, -0.2, 0))
+        } if (this.keylogger["a"] || this.keylogger["ArrowLeft"]) {
+            movementDirection.add(new Vector3(-0.2, 0, 0))
+        } if (this.keylogger["d"] || this.keylogger["ArrowRight"]) {
+            movementDirection.add(new Vector3(0.2, 0, 0))
+        } 
+        this.orbitcontrols?.target.set(this.character.position.x, this.character.position.y, this.character.position.z)
+        this.character.moveInDirection(movementDirection)
+        this.oldCameraPosition.copy(this.camera.position)
+        const target = this.oldCameraPosition.addScaledVector(movementDirection, 1)
+        this.camera.position.lerp(target, 0.2)
     }
+
 
     private initDefaults = async () => {
-        this.environment_scenes = await makeObjectsFromFile(["demoscene.glb"], this.loadingManager);
-        this.scene.background = new THREE.Color("#000000")
-        this.scene.add(this.light, this.target, ...this.environment_scenes, this.sphere, this.ambientLight, this.finalTarget);
+
+        this.environment_scenes = await makeObjectsFromFile(["block.glb"], this.loadingManager);
+        this.scene.background = this.backgroundColor
+        for (let n = 5; n < 40; n++) {
+            const block = makeBlock(randFloat(-n, n), randFloat(-n, n), randFloat(-n, n), this.blockColors[Math.floor(Math.random() * this.blockColors.length)])
+            this.scene.add(block); // Add the block to the scene
+            const newMixer = new THREE.AnimationMixer(block)
+            let randomVectors
+            if (n % 2 == 0) {
+                randomVectors = [0, 0, 0, 0, randFloat(-n, n), 0, 0, 0, 0]
+            } else {
+                randomVectors = [0, 0, 0, 0, 0, randFloat(-n, n), 0, 0, 0]
+            }
+            let vectorKeyframeTrack = [new THREE.VectorKeyframeTrack("track.position" + n, [0, 5, 10], randomVectors)]
+            const animationClip = new THREE.AnimationClip("Action" + n, 10, vectorKeyframeTrack)
+            const action = newMixer.clipAction(animationClip)
+            action.loop = THREE.LoopRepeat
+            action.play()
+            this.envBlocks.push(block)
+            this.vectorKeyframeTracks.push(vectorKeyframeTrack)
+            this.AnimationMixers.push(newMixer)
+            this.AnimationActions.push(action)
+            this.AnimationClips.push(animationClip)
+
+        }
+        // console.log("amount actions", this.AnimationActions)
+        // console.log("amoung mixers", this.AnimationMixers)
+        // console.log("amount tracks", this.vectorKeyframeTracks)
+        this.scene.add(this.character.light, this.character.sphere, ...this.environment_scenes, this.ambientLight);
         const axesHelper = new THREE.AxesHelper(5);
         this.scene.add(axesHelper);
-        const controls = new OrbitControls(this.camera, this.renderer.domElement);
-
+        this.orbitcontrols = new OrbitControls(this.camera, this.renderer.domElement);
     }
 
-    private moveLight = () => {
-        const delta = this.finalTarget.position.distanceTo(this.light.position)
-        this.light.position.lerp(this.finalTarget.position, 0.1)
-        this.sphere.position.lerp(this.finalTarget.position, 0.1)
-        if (delta <= 0.001) {
-            this.keepMoving = false;
-            this.finalTarget.visible = false
-        }
-    }
 
-    private changeLightIntensity = (value: number) => {
-        this.light.intensity = this.light.intensity + value
-    }
+    private animate = (time: number) => {
 
-    private renderLoop = () => {
-        if (this.keepMoving) {
-            this.moveLight()
-        }
-
-        requestAnimationFrame(this.renderLoop);
+        this.AnimationMixers.forEach((mixer) => mixer.update(this.clock.getDelta() / mixer.timeScale))
         // update the picking ray with the camera and pointer position
-
+        this.update(time)
         this.renderer.render(this.scene, this.camera);
+        requestAnimationFrame(this.animate);
+    }
+
+    private update(t: number) {
+        this.changeMovementState()
+        t += 0.01
     }
 
     static create = (uiEl: HTMLElement) => {

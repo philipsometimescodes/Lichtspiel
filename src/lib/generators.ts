@@ -2,27 +2,16 @@ import * as THREE from 'three';
 import { ObjectModel } from './ObjectModel';
 import { randFloat } from 'three/src/math/MathUtils.js';
 
-const zOffset = 0.1
-
 export const makeGround = () => {
-  const groundTexture = new THREE.TextureLoader().load('./textures/gras.jpg');
+  const groundTexture = new THREE.TextureLoader().load('./textures/gras.jpg')
   const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture });
-  // groundMaterial.shadowSide = THREE.DoubleSide;
-  const groundGeometry = new THREE.PlaneGeometry(2, 2);
+  groundMaterial.shadowSide = THREE.DoubleSide;
+  const groundGeometry = new THREE.PlaneGeometry(100, 100);
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.receiveShadow = true;
-  ground.position.set(0, 0, zOffset);
-  // ground.rotation.x = -Math.PI / 2;
+  ground.position.set(0, -1, 0);
+  ground.rotation.x = -Math.PI / 2;
   return ground;
-}
-
-export const makeLight = () => {
-  const light = new THREE.PointLight(0xffffff, 0.05);
-  light.position.set(0, 0, zOffset);
-  light.castShadow = true;
-  light.shadow.camera.near = 0.5;
-  light.shadow.camera.far = 2000;
-  return light;
 }
 
 export const makeRenderer = () => {
@@ -30,43 +19,30 @@ export const makeRenderer = () => {
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.type = THREE.PCFSoftShadowMap; // or any other shadow map type you prefer
   return renderer;
 }
 
 export const makeCamera = () => {
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-  camera.position.z = 5;
-  camera.up.set(0, 0, 1);
-  camera.position.set(0, 0, 2)
-  camera.lookAt(0, 0, 0);
   return camera;
 }
 
-export const makeSphere = () => {
-  const geometry = new THREE.SphereGeometry( 0.05, 16, 16 ); 
-  const material = new THREE.MeshStandardMaterial( { color: "#fffffff" } ); 
+export const makeCharacterSphere = () => {
+  const geometry = new THREE.SphereGeometry( 1, 16, 16 ); 
+  const material = new THREE.MeshBasicMaterial( { color: "#fffffff" } ); 
   const sphere = new THREE.Mesh( geometry, material );
-  sphere.position.set(0,0,zOffset)
+  sphere.position.set(0,0,0)
   return sphere
 }
 
-export const makeTarget = () => {
-  const geometry = new THREE.BoxGeometry(0.02, 0.02, 0.05);
-  const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
-  const cube = new THREE.Mesh(geometry, material);
-  cube.castShadow = true;
-  return cube;
-}
-
-export const makeFinalTarget = () => {
-  const geometry = new THREE.BoxGeometry(0.02, 0.02, 0.05);
-  const material = new THREE.MeshStandardMaterial({ color: "#FFF200" });
-  const cube = new THREE.Mesh(geometry, material);
-  cube.castShadow = true;
-  cube.visible = false;
-  return cube;
+export const makeLight = () => {
+  const light = new THREE.PointLight(0xffffff, 100);
+  light.position.set(0, 0, 0);
+  light.castShadow = true;
+  light.shadow.camera.near = 0.5;
+  light.shadow.camera.far = 2000;
+  return light;
 }
 
 export const makeObjectsFromFile = async (scenes: string[], loadingManager: THREE.LoadingManager) => {
@@ -81,8 +57,7 @@ export const makeObjectsFromFile = async (scenes: string[], loadingManager: THRE
 
 export const makeBlock = (x: number, y: number, z:number, color: THREE.Color) => {
   
-  const geometry = new THREE.BoxGeometry(randFloat(1,3), randFloat(1,2), randFloat(1,3))
-
+  const geometry = new THREE.BoxGeometry(randFloat(10,30), randFloat(10,20), randFloat(10,30))
   const material = new THREE.MeshStandardMaterial({color: color})
   const cube = new THREE.Mesh(geometry, material)
   cube.position.set(x,y,z)
